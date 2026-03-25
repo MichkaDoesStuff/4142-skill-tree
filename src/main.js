@@ -8,7 +8,7 @@ import earthNormalMap from './assets/earth_normal_mapping.png'
 const scene = new THREE.Scene()
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), antialias: true })
+const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), alpha: true })
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setSize(window.innerWidth, window.innerHeight)
 camera.position.set(0, 15, 40)
@@ -32,14 +32,15 @@ const earthRadius = 15
 const earthGeometry = new THREE.SphereGeometry(earthRadius, 64, 64)
 const earthMaterial = new THREE.MeshStandardMaterial({
   map: earthTexture,
-  normalMap: earthNormalTexture
+  normalMap: earthNormalTexture,
+  normalScale: new THREE.Vector2(3,3)
 })
 const earth = new THREE.Mesh(earthGeometry, earthMaterial)
 sceneGroup.add(earth)
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
 const pointLight = new THREE.PointLight(0xffffff, 1)
-pointLight.position.set(25, 25, 25)
+pointLight.position.set(25,25,25)
 scene.add(ambientLight, pointLight)
 
 const nodeGroup = new THREE.Group()
@@ -91,6 +92,18 @@ const pointer = new THREE.Vector2()
 let hoveredMesh = null
 
 const infoBox = document.getElementById('info')
+
+function addStar(){
+  const geometry = new THREE.SphereGeometry(0.25, 24, 24);
+  const material = new THREE.MeshStandardMaterial({color:0xf9eacd})
+  const star = new THREE.Mesh(geometry, material);
+
+  const[x,y,z] = Array(3).fill().map(() => THREE.MathUtils.randFloatSpread(100))
+  star.position.set(x,y,z)
+  scene.add(star)
+}
+
+Array(200).fill().forEach(addStar)
 
 function updateInfo(node) {
   if (!infoBox) return
@@ -147,8 +160,8 @@ updateInfo(null)
 
 function animate() {
   requestAnimationFrame(animate)
-  sceneGroup.rotation.y += 0.0009
-  sceneGroup.rotation.x += 0.0002
+  sceneGroup.rotation.y += 0.00045
+  sceneGroup.rotation.x += 0.0001
 
   controls.update()
   renderer.render(scene, camera)
