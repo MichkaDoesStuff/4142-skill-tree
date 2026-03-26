@@ -1,20 +1,65 @@
 import './style.css'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { skillNodes, latLonToVector3 } from './skillTreeData.js'
-import earthMap from './assets/earth_mapping.jpg'
-import earthNormalMap from './assets/earth_normal_mapping.png'
+import { graphData } from './graphSchema.js'
+import { graphManager } from './graphLogic.js'
+import { GraphRenderer } from './graphRenderer.js'
+
+// ============================================================================
+// SCENE SETUP
+// ============================================================================
 
 const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera(
+  75,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+)
+const renderer = new THREE.WebGLRenderer({ 
+  canvas: document.querySelector('#bg'), 
+  alpha: true,
+  antialias: true 
+})
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#bg'), alpha: true })
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setSize(window.innerWidth, window.innerHeight)
-camera.position.set(0, 15, 40)
+renderer.shadowMap.enabled = true
+scene.background = new THREE.Color(0x0a0e27)
+
+// Camera positioning
+camera.position.set(0, 40, 100)
+camera.lookAt(0, 0, 0)
+
+// ============================================================================
+// LIGHTING
+// ============================================================================
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+const pointLight = new THREE.PointLight(0xffffff, 1.2)
+pointLight.position.set(50, 50, 50)
+pointLight.castShadow = true
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+directionalLight.position.set(-30, 40, 30)
+directionalLight.castShadow = true
+
+scene.add(ambientLight, pointLight, directionalLight)
+
+// ============================================================================
+// CONTROLS
+// ============================================================================
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
+controls.dampingFactor = 0.05
+controls.autoRotate = false
+controls.maxDistance = 200
+controls.minDistance = 30
+
+// ============================================================================
+// RESPONSIVE DESIGN
+// ============================================================================
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
@@ -22,151 +67,128 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight)
 })
 
-const sceneGroup = new THREE.Group()
-scene.add(sceneGroup)
+// ============================================================================
+// INITIALIZE GRAPH RENDERER
+// ============================================================================
 
-const earthTexture = new THREE.TextureLoader().load(earthMap);
-const earthNormalTexture = new THREE.TextureLoader().load(earthNormalMap);
+const graphRenderer = new GraphRenderer(scene, camera, renderer)
+graphRenderer.initialize(graphData)
 
-const earthRadius = 15
-const earthGeometry = new THREE.SphereGeometry(earthRadius, 64, 64)
-const earthMaterial = new THREE.MeshStandardMaterial({
-  map: earthTexture,
-  normalMap: earthNormalTexture,
-  normalScale: new THREE.Vector2(3,3)
-})
-const earth = new THREE.Mesh(earthGeometry, earthMaterial)
-sceneGroup.add(earth)
-
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.8)
-const pointLight = new THREE.PointLight(0xffffff, 1)
-pointLight.position.set(25,25,25)
-scene.add(ambientLight, pointLight)
-
-const nodeGroup = new THREE.Group()
-const edgeGroup = new THREE.Group()
-sceneGroup.add(edgeGroup, nodeGroup)
-
-const statusColor = {
-  mastered: 0x00ff88,
-  inprogress: 0xffc100,
-  locked: 0xff4455,
-}
-
-const nodeMeshes = new Map()
-
-function createNode(node) {
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.7, 12, 12),
-    new THREE.MeshBasicMaterial({ color: statusColor[node.status] || 0xffffff })
-  )
-
-  mesh.position.copy(latLonToVector3(node.lat, node.lon, earthRadius + 1.1))
-  mesh.name = node.id
-  mesh.userData = node
-  nodeGroup.add(mesh)
-  nodeMeshes.set(node.id, mesh)
-}
-
-function createEdge(fromId, toId) {
-  const from = nodeMeshes.get(fromId)
-  const to = nodeMeshes.get(toId)
-  if (!from || !to) return
-
-  const mid = from.position.clone().add(to.position).multiplyScalar(0.5).normalize().multiplyScalar(earthRadius + 2)
-  const curve = new THREE.CatmullRomCurve3([from.position, mid, to.position])
-  const points = curve.getPoints(40)
-
-  const line = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(points),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 })
-  )
-  edgeGroup.add(line)
-}
-
-skillNodes.forEach(createNode)
-skillNodes.forEach(node => node.dependsOn.forEach(prev => createEdge(prev, node.id)))
-
-const raycaster = new THREE.Raycaster()
-const pointer = new THREE.Vector2()
-let hoveredMesh = null
-
-const infoBox = document.getElementById('info')
-
-function addStar(){
-  const geometry = new THREE.SphereGeometry(0.25, 24, 24);
-  const material = new THREE.MeshStandardMaterial({color:0xf9eacd})
-  const star = new THREE.Mesh(geometry, material);
-
-  const[x,y,z] = Array(3).fill().map(() => THREE.MathUtils.randFloatSpread(100))
-  star.position.set(x,y,z)
-  scene.add(star)
-}
-
-Array(200).fill().forEach(addStar)
-
-function updateInfo(node) {
-  if (!infoBox) return
-  if (!node) {
-    infoBox.innerHTML = '<strong>Hover a node</strong> to see details.'
-    return
-  }
-
-  infoBox.innerHTML = `
-    <strong>${node.title}</strong><br>
-    Category: ${node.category}<br>
-    Status: ${node.status}<br>
-    Dependencies: ${node.dependsOn.length ? node.dependsOn.join(', ') : 'None'}
-  `
-}
-
-function onPointerMove(event) {
-  pointer.x = (event.clientX / window.innerWidth) * 2 - 1
-  pointer.y = -(event.clientY / window.innerHeight) * 2 + 1
-
-  raycaster.setFromCamera(pointer, camera)
-  const intersects = raycaster.intersectObjects(Array.from(nodeMeshes.values()))
-
-  if (intersects.length > 0) {
-    const mesh = intersects[0].object
-    if (hoveredMesh !== mesh) {
-      if (hoveredMesh) {
-        hoveredMesh.scale.setScalar(1)
-      }
-      hoveredMesh = mesh
-      hoveredMesh.scale.setScalar(1.45)
-      updateInfo(hoveredMesh.userData)
-    }
-  } else {
-    if (hoveredMesh) {
-      hoveredMesh.scale.setScalar(1)
-      hoveredMesh = null
-      updateInfo(null)
-    }
-  }
-}
-
-function onClick() {
-  if (hoveredMesh) {
-    const n = hoveredMesh.userData
-    alert(`${n.title}\nCategory: ${n.category}\nStatus: ${n.status}\nPrerequisites: ${n.dependsOn.join(', ') || 'None'}`)
-  }
-}
-
-window.addEventListener('pointermove', onPointerMove)
-window.addEventListener('click', onClick)
-
-updateInfo(null)
+// ============================================================================
+// ANIMATION LOOP
+// ============================================================================
 
 function animate() {
   requestAnimationFrame(animate)
-  sceneGroup.rotation.y += 0.00045
-  sceneGroup.rotation.x += 0.0001
-
+  
   controls.update()
-  renderer.render(scene, camera)
+  graphRenderer.update()
+  graphRenderer.render()
 }
 
 animate()
+
+// ============================================================================
+// UI OVERLAY (Info Panel)
+// ============================================================================
+
+const infoPanel = document.createElement('div')
+infoPanel.id = 'info-panel'
+infoPanel.style.cssText = `
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 350px;
+  max-height: 500px;
+  background: rgba(10, 14, 39, 0.95);
+  border: 2px solid #6c5ce7;
+  border-radius: 8px;
+  padding: 20px;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  overflow-y: auto;
+  display: none;
+  z-index: 100;
+  box-shadow: 0 0 20px rgba(108, 92, 231, 0.3);
+`
+document.body.appendChild(infoPanel)
+
+// Update UI when node is selected
+graphManager.onStateChange((eventType, payload) => {
+  if (eventType === 'nodeSelected' && payload.nodeId) {
+    const allNodes = flattenNodes(graphData.nodes)
+    const node = allNodes.find(n => n.id === payload.nodeId)
+    
+    if (node) {
+      infoPanel.innerHTML = `
+        <h3 style="margin: 0 0 10px 0; color: #00ff88;">${node.label}</h3>
+        <p style="margin: 5px 0;"><strong>ID:</strong> ${node.id}</p>
+        <p style="margin: 5px 0;"><strong>Category:</strong> ${node.category}</p>
+        ${node.metadata?.description ? `<p style="margin: 5px 0; font-style: italic; color: #aaaaaa;">${node.metadata.description}</p>` : ''}
+        ${node.children && node.children.length > 0 ? `<p style="margin-top: 10px; color: #6c5ce7;"><strong>Contains ${node.children.length} related concept(s)</strong></p>` : ''}
+      `
+      infoPanel.style.display = 'block'
+    }
+  } else if (eventType === 'nodeSelected' && !payload.nodeId) {
+    infoPanel.style.display = 'none'
+  }
+})
+
+// ============================================================================
+// INSTRUCTIONS & HELP
+// ============================================================================
+
+const instructionsPanel = document.createElement('div')
+instructionsPanel.id = 'instructions'
+instructionsPanel.style.cssText = `
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 300px;
+  background: rgba(10, 14, 39, 0.9);
+  border: 2px solid #4ecdc4;
+  border-radius: 8px;
+  padding: 15px;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  z-index: 100;
+  box-shadow: 0 0 15px rgba(78, 205, 196, 0.2);
+`
+instructionsPanel.innerHTML = `
+  <h4 style="margin: 0 0 10px 0; color: #4ecdc4;">📊 Concept Graph</h4>
+  <div style="line-height: 1.6;">
+    <p><strong>🖱️ Navigate:</strong></p>
+    <ul style="margin: 5px 0; padding-left: 15px;">
+      <li>Rotate: Drag with mouse</li>
+      <li>Zoom: Scroll wheel</li>
+      <li>Select: Click a node</li>
+      <li>Hover: Highlight nodes</li>
+    </ul>
+    <p><strong>🌌 Concepts:</strong></p>
+    <ul style="margin: 5px 0; padding-left: 15px;">
+      <li>🪨 Planets = Core concepts</li>
+      <li>⭐ Stars = Related topics</li>
+      <li>✨ Nested = Sub-topics</li>
+    </ul>
+  </div>
+`
+document.body.appendChild(instructionsPanel)
+
+// Helper function to flatten nested nodes
+function flattenNodes(nodes) {
+  let flat = []
+  for (const node of nodes) {
+    flat.push(node)
+    if (node.children && node.children.length > 0) {
+      flat = flat.concat(flattenNodes(node.children))
+    }
+  }
+  return flat
+}
+
+console.log('✅ Graph Renderer initialized with', graphData.nodes.length, 'core nodes')
+console.log('📍 Graph edges:', graphData.edges.length)
 
 
