@@ -5,13 +5,16 @@
  * Generic operations that don't depend on rendering or progression state.
  */
 
-import { graphData, findNodeById, getAllNodes } from './graphSchema.js'
 
 export class GraphManager {
-  constructor(graphData) {
-    this.data = graphData
+  constructor() {
+    this.data = { nodes: [], edges: [] }
     this.selectedNode = null
     this.stateChangedCallbacks = []
+  }
+
+  setData(newData) {
+    this.data = newData;
   }
 
   /**
@@ -68,10 +71,24 @@ export class GraphManager {
   }
 
   /**
+   * Helper: Find a node by ID (recursive search across all levels)
+   */
+  findNodeById(id, nodes = this.data.nodes) {
+    for (const node of nodes) {
+      if (node.id === id) return node
+      if (node.children && node.children.length > 0) {
+        const found = this.findNodeById(id, node.children)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  /**
    * Get all descendants of a node (entire subtree)
    */
   getDescendants(nodeId) {
-    const node = findNodeById(nodeId)
+    const node = this.findNodeById(nodeId)
     if (!node) return []
     const descendants = []
     const traverse = (n) => {
@@ -109,4 +126,4 @@ export class GraphManager {
 }
 
 // Export singleton instance
-export const graphManager = new GraphManager(graphData)
+export const graphManager = new GraphManager()

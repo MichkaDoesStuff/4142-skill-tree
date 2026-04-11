@@ -1,7 +1,6 @@
 import './style.css'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { graphData } from './graphSchema.js'
 import { graphManager } from './graphLogic.js'
 import { GraphRenderer } from './graphRenderer.js'
 
@@ -68,11 +67,54 @@ window.addEventListener('resize', () => {
 })
 
 // ============================================================================
-// INITIALIZE GRAPH RENDERER
+// INITIALIZE GRAPH RENDERER & FETCH DATA
 // ============================================================================
 
 const graphRenderer = new GraphRenderer(scene, camera, renderer)
-graphRenderer.initialize(graphData)
+
+// Create a Loading Overlay
+const loadingOverlay = document.createElement('div')
+loadingOverlay.id = 'loading-overlay'
+loadingOverlay.style.cssText = `
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #4ecdc4;
+  font-family: 'Courier New', monospace;
+  font-size: 24px;
+  font-weight: bold;
+  pointer-events: none;
+`
+loadingOverlay.textContent = 'Connecting to AuraDB... Loading Neural Pathways...'
+document.body.appendChild(loadingOverlay)
+
+let isDataLoaded = false
+
+async function loadGraphData() {
+  try {
+    const res = await fetch('http://localhost:3000/api/graph');
+    if (!res.ok) throw new Error("Failed to fetch");
+    const dbData = await res.json();
+    
+    // Inject the data into the logic manager and renderer
+    graphManager.setData(dbData)
+    graphRenderer.initialize(dbData)
+    
+    // Remove loading overlay
+    document.body.removeChild(loadingOverlay)
+    isDataLoaded = true
+    
+    console.log('✅ Graph Renderer initialized with', dbData.nodes.length, 'core nodes')
+    console.log('📍 Graph edges:', dbData.edges.length)
+  } catch (error) {
+    loadingOverlay.textContent = '❌ Error Connecting to Database :('
+    loadingOverlay.style.color = '#ff6b6b'
+    console.error(error)
+  }
+}
+
+loadGraphData()
 
 // ============================================================================
 // ANIMATION LOOP
@@ -80,9 +122,13 @@ graphRenderer.initialize(graphData)
 
 function animate() {
   requestAnimationFrame(animate)
-  
   controls.update()
-  graphRenderer.update()
+
+  if (isDataLoaded) {
+    graphRenderer.update()
+  }
+  
+  // Notice we render the scene immediately even if data isn't loaded (so we see the background)
   graphRenderer.render()
 }
 
@@ -117,7 +163,7 @@ document.body.appendChild(infoPanel)
 // Update UI when node is selected
 graphManager.onStateChange((eventType, payload) => {
   if (eventType === 'nodeSelected' && payload.nodeId) {
-    const allNodes = flattenNodes(graphData.nodes)
+    const allNodes = flattenNodes(graphManager.data.nodes)
     const node = allNodes.find(n => n.id === payload.nodeId)
     
     if (node) {
@@ -187,8 +233,5 @@ function flattenNodes(nodes) {
   }
   return flat
 }
-
-console.log('✅ Graph Renderer initialized with', graphData.nodes.length, 'core nodes')
-console.log('📍 Graph edges:', graphData.edges.length)
 
 

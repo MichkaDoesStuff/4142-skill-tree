@@ -3,10 +3,10 @@
 
 ### 03/23/2026
 ```text
-- Git installed
-- Node.js installed
-- Vite project created
-- Three.js installed
+- Git installed and connected to project
+- Node.js installed and connected to project
+- Vite project created and connects to project
+- Three.js installed and connected to project
 - Vite local dev server running
 - Git repo initialized
 - GitHub repo connected
