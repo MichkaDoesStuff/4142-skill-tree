@@ -14,3 +14,15 @@
 - VS Code extensions installed
 ```
 >Notes: 
+
+### 04/11/2026
+```text
+- Transitioned to Full-Stack Architecture
+- Neo4j AuraDB (Cloud Graph Database) integration
+- Express.js and Node.js backend server created
+- dotenv for secure credential management (.env)
+- REST API endpoint for dynamic data fetching
+- Cypher query language scripting (seedDB.js migration)
+- .gitignore security management for passwords
+```
+>Notes: 
