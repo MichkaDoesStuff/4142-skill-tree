@@ -31,4 +31,59 @@ body {
   border-radius: 8px;
   padding: 8px 12px;
   backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* =========================================
+   LITTLE BIG PLANET HUD STYLES
+   ========================================= */
+
+#lbp-nav {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  z-index: 1000;
+}
+
+.lbp-btn {
+  background: rgba(20, 25, 50, 0.85);
+  border: 2px solid #4ecdc4;
+  border-radius: 30px;
+  padding: 12px 24px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+  backdrop-filter: blur(5px);
+  outline: none;
+}
+
+.lbp-btn:hover {
+  background: rgba(78, 205, 196, 0.3);
+  transform: translateY(-5px) scale(1.05);
+  box-shadow: 0 8px 25px rgba(78, 205, 196, 0.5);
+}
+
+.lbp-btn:active {
+  transform: translateY(2px) scale(0.95);
+}
+
+.primary-btn {
+  background: rgba(108, 92, 231, 0.85);
+  border-color: #6c5ce7;
+  box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
+  font-size: 18px;
+  padding: 14px 28px;
+}
+
+.primary-btn:hover {
+  background: rgba(108, 92, 231, 0.4);
+  box-shadow: 0 8px 25px rgba(108, 92, 231, 0.6);
 }

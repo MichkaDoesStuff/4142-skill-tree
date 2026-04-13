@@ -26,3 +26,14 @@
 - .gitignore security management for passwords
 ```
 >Notes: 
+
+### 04/13/2026
+```text
+- Designed 2.5D LittleBigPlanet-style navigation system
+- Implemented 4-State Interaction Model (Browsing, Selected, Child Selected, Map View)
+- Built smooth camera framing and automatic panning transitions
+- Created INTERACTION_STATE_MACHINE.md as local graph documentation
+- Utilized Mermaid.js for state machine logic visualization
+- Installed "Markdown Preview Mermaid Support" VS Code extension
+```
+>Notes: 

@@ -9,11 +9,15 @@ import { GraphRenderer } from './graphRenderer.js'
 // ============================================================================
 
 const scene = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
+const aspect = window.innerWidth / window.innerHeight
+const frustumSize = 1000
+const camera = new THREE.OrthographicCamera(
+  frustumSize * aspect / -2,
+  frustumSize * aspect / 2,
+  frustumSize / 2,
+  frustumSize / -2,
   0.1,
-  1000
+  10000
 )
 const renderer = new THREE.WebGLRenderer({ 
   canvas: document.querySelector('#bg'), 
@@ -27,7 +31,7 @@ renderer.shadowMap.enabled = true
 scene.background = new THREE.Color(0x0a0e27)
 
 // Camera positioning
-camera.position.set(0, 40, 100)
+camera.position.set(0, 0, 1000)
 camera.lookAt(0, 0, 0)
 
 // ============================================================================
@@ -53,15 +57,26 @@ const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
 controls.dampingFactor = 0.05
 controls.autoRotate = false
-controls.maxDistance = 200
-controls.minDistance = 30
+// Lock pan/zoom for Planet Mode
+controls.enableZoom = false
+controls.enablePan = false
 
 // ============================================================================
 // RESPONSIVE DESIGN
 // ============================================================================
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight
+  const aspect = window.innerWidth / window.innerHeight
+  // Base bounds
+  const baseLeft = -frustumSize * aspect / 2
+  const baseRight = frustumSize * aspect / 2
+  
+  // Apply any active camera shift
+  camera.left = baseLeft - cameraShiftX
+  camera.right = baseRight - cameraShiftX
+  camera.top = frustumSize / 2
+  camera.bottom = -frustumSize / 2
+  
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
 })
@@ -117,19 +132,197 @@ async function loadGraphData() {
 loadGraphData()
 
 // ============================================================================
+// APP STATE & UI
+// ============================================================================
+
+window.APP_STATE = 'BROWSING'
+
+// UI Navigation
+const navContainer = document.createElement('div')
+navContainer.id = 'lbp-nav'
+document.body.appendChild(navContainer)
+
+const prevBtn = document.createElement('button')
+prevBtn.textContent = '◀ Previous Planet'
+prevBtn.className = 'lbp-btn'
+
+const selectBtn = document.createElement('button')
+selectBtn.textContent = 'Select Planet'
+selectBtn.className = 'lbp-btn select-btn'
+
+const backBtn = document.createElement('button')
+backBtn.textContent = '◀ Back to Browsing'
+backBtn.className = 'lbp-btn'
+
+const childBackBtn = document.createElement('button')
+childBackBtn.textContent = '◀ Return to Selection'
+childBackBtn.className = 'lbp-btn'
+
+const mapToggleBtn = document.createElement('button')
+mapToggleBtn.innerHTML = '🗺️ Unroll Map'
+mapToggleBtn.className = 'lbp-btn primary-btn'
+
+const nextBtn = document.createElement('button')
+nextBtn.textContent = 'Next Planet ▶'
+nextBtn.className = 'lbp-btn'
+
+navContainer.appendChild(prevBtn)
+navContainer.appendChild(selectBtn)
+navContainer.appendChild(mapToggleBtn)
+navContainer.appendChild(childBackBtn)
+navContainer.appendChild(backBtn)
+navContainer.appendChild(nextBtn)
+
+window.setAppState = (state) => {
+    window.APP_STATE = state
+    updateUI()
+}
+
+function updateUI() {
+  if (window.APP_STATE === 'BROWSING') {
+    prevBtn.style.display = 'block'
+    nextBtn.style.display = 'block'
+    selectBtn.style.display = 'block'
+    mapToggleBtn.style.display = 'none'
+    backBtn.style.display = 'none'
+    childBackBtn.style.display = 'none'
+    
+    controls.enableRotate = false
+    controls.enableZoom = false
+    controls.enablePan = false
+  } else if (window.APP_STATE === 'SELECTED' || window.APP_STATE === 'CHILD_NODE_SELECTED') {
+    prevBtn.style.display = 'none'
+    nextBtn.style.display = 'none'
+    selectBtn.style.display = 'none'
+    mapToggleBtn.style.display = 'block'
+    backBtn.style.display = 'block'
+    childBackBtn.style.display = window.APP_STATE === 'CHILD_NODE_SELECTED' ? 'block' : 'none'
+    
+    // Custom rotation is via drag on canvas
+    controls.enableRotate = false 
+    if (graphRenderer.isMapMode) {
+      controls.enableZoom = true
+      controls.enablePan = true
+      // Map mode uses left-click to pan!
+      controls.mouseButtons.LEFT = THREE.MOUSE.PAN
+    } else {
+      controls.enableZoom = false
+      controls.enablePan = false
+      controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE
+    }
+  }
+}
+
+prevBtn.onclick = () => { graphRenderer.prevPlanet(); updateUI() }
+nextBtn.onclick = () => { graphRenderer.nextPlanet(); updateUI() }
+
+selectBtn.onclick = () => {
+    window.setAppState('SELECTED')
+}
+
+backBtn.onclick = () => {
+    if (graphRenderer.isMapMode) {
+        graphRenderer.toggleMapView()
+        mapToggleBtn.innerHTML = '🗺️ Unroll Map'
+    }
+    graphRenderer.forceResetRotations()
+    graphManager.deselectNode()
+    window.setAppState('BROWSING')
+}
+
+childBackBtn.onclick = () => {
+    graphManager.deselectNode()
+    graphRenderer.targetClusterQuat = null
+    window.setAppState('SELECTED')
+}
+
+mapToggleBtn.onclick = () => {
+  graphRenderer.toggleMapView()
+  mapToggleBtn.innerHTML = graphRenderer.isMapMode ? '🌍 Return to Planet' : '🗺️ Unroll Map'
+  
+  updateUI()
+}
+
+updateUI()
+
+// ============================================================================
 // ANIMATION LOOP
 // ============================================================================
 
+let cameraShiftX = 0
+
 function animate() {
   requestAnimationFrame(animate)
-  controls.update()
 
   if (isDataLoaded) {
+    const activePlanetPos = graphRenderer.getActivePlanetPosition()
+    
+    const prevTarget = controls.target.clone()
+    
+        // In Map Mode, we stop forcing the target to the planet so the user can pan freely.
+    if (!graphRenderer.isMapMode) {
+        controls.target.lerp(activePlanetPos, 0.08)
+        
+        // Dynamic Zoom: zoom into the planet when selected
+        const targetZoom = (window.APP_STATE === 'SELECTED' || window.APP_STATE === 'CHILD_NODE_SELECTED') ? 1.6 : 1.0
+        camera.zoom += (targetZoom - camera.zoom) * 0.08
+    } else {
+        // Enforce Min/Max Zoom bounds in Map Mode so they don't get lost in void
+        if (camera.zoom < 0.6) camera.zoom = 0.6;
+        if (camera.zoom > 5.0) camera.zoom = 5.0;
+        
+        // Clamp Map Boundaries
+        const mapWidth = 2 * Math.PI * 200 // 1256
+        const mapHeight = Math.PI * 200    // 628
+        const aspect = window.innerWidth / window.innerHeight;
+        
+        const viewWidth = (frustumSize * aspect) / camera.zoom;
+        const viewHeight = frustumSize / camera.zoom;
+        
+        const maxOffsetX = Math.max(0, (mapWidth / 2) - (viewWidth / 2));
+        const maxOffsetY = Math.max(0, (mapHeight / 2) - (viewHeight / 2));
+        
+        const minX = activePlanetPos.x - maxOffsetX;
+        const maxX = activePlanetPos.x + maxOffsetX;
+        const minY = activePlanetPos.y - maxOffsetY;
+        const maxY = activePlanetPos.y + maxOffsetY;
+        
+        controls.target.x = Math.max(minX, Math.min(maxX, controls.target.x));
+        controls.target.y = Math.max(minY, Math.min(maxY, controls.target.y));
+    }
+    
+    // Shift camera along with the target smoothly
+    const delta = controls.target.clone().sub(prevTarget)
+    camera.position.add(delta)
+    
+    // Force frontal view during Map Mode
+    if (graphRenderer.isMapMode) {
+        const frontalPos = controls.target.clone().add(new THREE.Vector3(0, 0, 1000))
+        camera.position.lerp(frontalPos, 0.08)
+    }
+    
+    // Handle view shifting to frame active planet on the right
+    const aspect = window.innerWidth / window.innerHeight
+    
+    // Center if Map Mode or in any kind of Selection mode
+    const isCentered = graphRenderer.isMapMode || window.APP_STATE === 'SELECTED' || window.APP_STATE === 'CHILD_NODE_SELECTED'
+    const targetShiftX = isCentered ? 0 : (frustumSize * aspect * 0.25)
+    
+    cameraShiftX += (targetShiftX - cameraShiftX) * 0.08
+    
+    const baseLeft = -frustumSize * aspect / 2
+    const baseRight = frustumSize * aspect / 2
+    camera.left = baseLeft - cameraShiftX
+    camera.right = baseRight - cameraShiftX
+    camera.updateProjectionMatrix()
+
     graphRenderer.update()
   }
+
+  controls.update()
   
   // Notice we render the scene immediately even if data isn't loaded (so we see the background)
-  graphRenderer.render()
+  if (graphRenderer) graphRenderer.render()
 }
 
 animate()
@@ -203,20 +396,14 @@ instructionsPanel.style.cssText = `
   box-shadow: 0 0 15px rgba(78, 205, 196, 0.2);
 `
 instructionsPanel.innerHTML = `
-  <h4 style="margin: 0 0 10px 0; color: #4ecdc4;">📊 Concept Graph</h4>
+  <h4 style="margin: 0 0 10px 0; color: #4ecdc4;">🪐 Little Big Tree</h4>
   <div style="line-height: 1.6;">
     <p><strong>🖱️ Navigate:</strong></p>
     <ul style="margin: 5px 0; padding-left: 15px;">
-      <li>Rotate: Drag with mouse</li>
-      <li>Zoom: Scroll wheel</li>
+      <li>Rotate: Drag with mouse on planets</li>
+      <li>Switch Planets: Bottom Arrows</li>
+      <li>Unroll Map: Bottom Center Button</li>
       <li>Select: Click a node</li>
-      <li>Hover: Highlight nodes</li>
-    </ul>
-    <p><strong>🌌 Concepts:</strong></p>
-    <ul style="margin: 5px 0; padding-left: 15px;">
-      <li>🪨 Planets = Core concepts</li>
-      <li>⭐ Stars = Related topics</li>
-      <li>✨ Nested = Sub-topics</li>
     </ul>
   </div>
 `
